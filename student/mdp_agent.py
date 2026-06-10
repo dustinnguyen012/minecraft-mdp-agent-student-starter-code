@@ -59,6 +59,7 @@ SERVER_URL = os.environ.get("MDP_SERVER_URL", "https://localhost")
 BOT_NAME = os.environ.get("BOT_NAME", "my_bot")
 SAVE_DIR = os.path.join(os.path.dirname(__file__), "..", "results")
 SAVE_EVERY = 5   # write a pkl snapshot every N episodes
+LOG_FILE = os.path.join(SAVE_DIR, f"{BOT_NAME}.log")
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -387,7 +388,23 @@ def _make_env():
 # MAIN LOOP: Explore → Learn T̂ → Plan (PI + VI) → Deploy
 # ═══════════════════════════════════════════════════════════════════════════════
 
+_log_fh = None
+
+def _log(msg):
+    """Print to stdout AND append to results/<BOT_NAME>.log so
+    scripts/analyze.py can read episode data without --log flags."""
+    global _log_fh
+    print(msg)
+    if _log_fh is not None:
+        _log_fh.write(msg + "\n")
+        _log_fh.flush()
+
+
 def run():
+    global _log_fh
+    os.makedirs(SAVE_DIR, exist_ok=True)
+    _log_fh = open(LOG_FILE, "a")
+
     env = _make_env()
     NUM_ACTIONS = env.num_actions
     print(f"Loaded {NUM_ACTIONS} actions from bridge: {env.ACTION_NAMES}")
@@ -438,8 +455,8 @@ def run():
         # Here we run PI and use VI as a check; swap freely.
         if (episode + 1) % replan_every == 0 and len(all_states) > 5:
             states_list = list(all_states)
-            print(f"\n  Re-planning on {len(states_list)} states, "
-                  f"{T.num_transitions} transitions:")
+            _log(f"\n  Re-planning on {len(states_list)} states, "
+                 f"{T.num_transitions} transitions:")
             try:
                 pi_policy, pi_V = policy_iteration(
                     T, reward_fn, states_list, NUM_ACTIONS, gamma=GAMMA)
@@ -449,16 +466,16 @@ def run():
 
                 # Compare: how often do PI and VI pick the same action?
                 agree = sum(1 for s in states_list if pi_policy[s] == vi_policy[s])
-                print(f"  PI/VI agreement: {agree}/{len(states_list)} states")
+                _log(f"  PI/VI agreement: {agree}/{len(states_list)} states")
 
                 # Deploy VI's policy (or PI's — student's choice).
                 policy = vi_policy
             except Exception as e:
-                print(f"  Planning failed: {e}")
+                _log(f"  Planning failed: {e}")
 
         # Logging (format matches what scripts/analyze.py parses)
         avg = np.mean(episode_rewards[-10:]) if episode_rewards else 0
-        print(
+        _log(
             f"[Bot {BOT_NAME}] Ep {episode + 1:5d} | "
             f"R: {total_reward:7.1f} | Avg(10): {avg:7.1f} | "
             f"ε: {epsilon:.4f} | States: {len(all_states):5d} | "
