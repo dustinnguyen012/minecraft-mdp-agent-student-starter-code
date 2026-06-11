@@ -350,19 +350,12 @@ def main():
     out = args.out or (results_dir / "analysis")
     out.mkdir(exist_ok=True, parents=True)
 
-    # Resolve log: check results/<bot>.log first (auto-created by mdp_agent),
-    # then fall back to /tmp/bot*.log, then to explicit --log.
+    # Resolve log.
     log = args.log
     if log is None:
-        candidate_results = results_dir / f"{bot}.log"
         bot_id = os.environ.get("BOT_ID", "0")
-        candidate_tmp = Path(f"/tmp/bot{bot_id}.log")
-        if candidate_results.exists():
-            log = candidate_results
-        elif candidate_tmp.exists():
-            log = candidate_tmp
-        else:
-            log = Path("/dev/null")
+        candidate = Path(f"/tmp/bot{bot_id}.log")
+        log = candidate if candidate.exists() else Path("/dev/null")
 
     # Load data.
     series = load_pkl_series(results_dir, bot)
@@ -403,48 +396,15 @@ def main():
         print()
 
     # Plots.
-    print(f"Generating plots in {out}/\n")
-    generated = 0
-
     if plot_rewards(episodes, out / f"{bot}_rewards.html", bot):
-        print(f"  [OK] {bot}_rewards.html")
-        generated += 1
-    else:
-        print(f"  [SKIP] {bot}_rewards.html — no episode data.")
-        if str(log) == "/dev/null" or not log.exists():
-            print(f"         No log file found. Run your agent for a few episodes first")
-            print(f"         (mdp_agent.py saves a log to results/{bot}.log automatically).")
-        else:
-            print(f"         Log file {log} exists but has no episode lines yet.")
-            print(f"         Let your agent run longer — it needs at least 1 completed episode.")
-
+        print(f"  wrote {out / f'{bot}_rewards.html'}")
     if plot_growth(episodes, out / f"{bot}_growth.html", bot):
-        print(f"  [OK] {bot}_growth.html")
-        generated += 1
-    else:
-        print(f"  [SKIP] {bot}_growth.html — same reason as rewards (needs episode data).")
-
+        print(f"  wrote {out / f'{bot}_growth.html'}")
     if plot_action_distribution(totals, out / f"{bot}_actions.html", bot, args.top_actions):
-        print(f"  [OK] {bot}_actions.html")
-        generated += 1
-    else:
-        print(f"  [SKIP] {bot}_actions.html — no action data in pkl files (T_totals empty).")
-        print(f"         Your agent needs to run long enough to record transitions.")
-
+        print(f"  wrote {out / f'{bot}_actions.html'}")
     if plot_action_timeline(series, action_names, out / f"{bot}_action_timeline.html",
                             bot, args.top_actions):
-        print(f"  [OK] {bot}_action_timeline.html")
-        generated += 1
-    else:
-        print(f"  [SKIP] {bot}_action_timeline.html — need at least 1 pkl snapshot with action data.")
-
-    print(f"\n  {generated}/4 plots generated.")
-    if generated < 4 and not episodes:
-        print(f"\n  The rewards and growth plots need episode log data.")
-        print(f"  Your agent writes this to results/{bot}.log automatically.")
-        print(f"  If you ran your agent in a notebook, make sure you ran it via:")
-        print(f"      from student.mdp_agent import run")
-        print(f"      run()")
+        print(f"  wrote {out / f'{bot}_action_timeline.html'}")
     print()
 
 
